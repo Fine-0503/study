@@ -1,0 +1,464 @@
+\chapter{基于光谱特征保持的高光谱影像空间升尺度转换方法}
+\section{引言}
+% 需要引出尺度效应问题，这一章的目的是揭示无人机尺度变化过程中矿物光谱诊断性吸收特征的尺度效应规律，然后提出一种特征保持的方法，以构建多尺度数据集。
+本章提出一种基于光谱特征保持的高光谱影像尺度转换方法，在空间升尺度转换过程中可以有效保持矿物的诊断光谱特征。该方法将高光谱影像的波段相关性结构作为光谱特征的本质表征，并引入Tikhonov正则化伪逆以抑制重采样引起的光谱失真。首先利用波段相关矩阵表征光谱结构信息。随后，在空间重采样阶段联合优化光谱保持项与空间重采样项，实现光谱与空间信息的协同保持。实验采用无人机获取的多尺度高光谱影像数据（飞行高度从30m至150m）对方法性能进行验证。结果表明，SpePR方法能够有效保持矿物诊断光谱特征，为多尺度高光谱矿物制图提供了可靠技术支持。
+\section{空间尺度上推模型}
+\subsection{基于光谱保持的空间尺度上推模型}
+高光谱数据中各波段间存在显著的相关性结构\cite{manolakis2008spectral}，本研究利用这一特性提出基于光谱特征保持的高光谱影像尺度转换方法（Spectral-Preserving Resampling, SpePR），以减少空间尺度转换过程中的光谱畸变。该方法的实验流程首先采用三次插值（Cubic Interpolation）对高分辨率高光谱影像进行空间重采样，生成不同空间分辨率的模拟影像。相比于双线性插值和最近邻插值等常用方法，三次插值通过三阶多项式函数提供更高级别的空间平滑性，能够有效抑制尺度转换过程中产生的边缘锯齿效应\cite{gallagher2005detection,hanssen2002evaluation}。然而，插值运算会重新计算像元光谱值，这一过程可能引入光谱曲线的局部偏移或形变，特别是在矿物关键吸收特征区域，因此需要实施光谱校正以保持光谱特征的完整性。
+
+SpePR方法的核心是利用波段相关性结构作为光谱特征的本质表征，通过正则化技术构建稳健的光谱修正机制。光谱相关性矩阵C反映了高光谱影像中各波段间的光谱依赖关系，其计算公式为：
+\begin{equation}
+C_{i,j}=\frac{\mathrm{Cov}(B_i,B_j)}{\sigma_{B_i}\sigma_{B_j}}
+\label{eq:correlation_coeff}
+\end{equation}
+
+式中，$B_i$和$B_j$分别表示第i和第j波段的光谱向量，$\mathrm{Cov}(B_i,B_j)$为两波段间的协方差，$\sigma_{B_i}$和$\sigma_{B_j}$为各自的标准差。光谱相关性矩阵捕获了地物光谱的内在结构特征，能够作为光谱修正的可靠约束。
+
+我们引入光谱平衡系数($\alpha$)和正则化参数($\beta$)，分别用于调整原始与修正光谱的贡献权重，以及确保数值计算稳定性。参数$\alpha$用于在保持空间细节和光谱特征之间建立平衡，其值范围为[0,1]，值越接近1表示保留的空间信息越多。正则化参数$\beta$以保证协方差矩阵求逆的数值稳定性。我们对模型参数进行了敏感性分析。由于本研究采用的数据具备高信噪比，因此更侧重于对光谱进行精细修正。当$\alpha$在0.85至0.95的区间内取值时，模型均能取得稳健且优于传统方法的结果。在本文的实验中，我们统一设置$\alpha=0.94$和$\beta=0.15$。
+
+SpePR方法基于原始高光谱影像的光谱相关性矩阵C作为约束条件，对重采样后影像的光谱进行优化。光谱修正的数学表达为：
+\begin{equation}
+I_{\text{corrected}} = \alpha \cdot I_{\text{sampled}} + (1-\alpha) \cdot I_{\text{sampled}} C^{-1}
+\label{eq:I_corrected}
+\end{equation}
+
+其中，$I_{\text{sampled}}$表示空间重采样后的光谱，$\alpha$代表空间保真项，保持重采样图像的空间细节；(1-$\alpha$)代表光谱修正项，基于波段相关性结构对光谱特征进行修正。光谱相关性矩阵C反映不同波段间的线性相关关系。我们使用基于Tikhonov\cite{tikhonov1963solution}正则化计算的光谱变换矩阵$C^{-1}$作为光谱修正项的加权矩阵，使光谱修正过程在保留整体结构的同时，增强关键吸收特征的保持能力。
+\begin{equation}
+\mathbf{C}^{-1} = \left( \mathbf{C} + \beta \mathbf{I} \right)^{-1}
+\label{eq:C_inverse_correction}
+\end{equation}
+
+计算波段相关性矩阵的伪逆来解决校正过程中可能的奇异矩阵问题，获得更稳定的光谱修正结果。在实现层面，SpePR方法采用矩阵运算进行批量处理，避免了逐像素循环，大幅提高了计算效率。
+
+SpePR方法通过将高光谱图像重采样问题构建为包含数据保真项和光谱结构保持项的优化框架，结合Tikhonov正则化技术，实现了高效且有效的光谱特征保持。与基于PCA或MNF的特征空间变换方法不同\cite{kang2020hyperspectral,cao2018robust}，SpePR不依赖降维或特征子空间映射，而是在重采样过程中直接于光谱域显式引入全波段相关矩阵作为约束项，以维持波段间的结构一致性。该方法的核心创新在于利用波段相关性结构作为光谱特征的本质表征，并通过解析解形式实现计算高效的光谱修正。通过优化尺度转换后影像的光谱分布，使其更接近原始影像的光谱特性，SpePR方法能够有效减少因尺度变化导致的光谱偏差，保持矿物关键诊断特征的完整性，为多尺度高光谱数据分析提供可靠支持。
+
+\subsection{重采样方法}
+本研究对所提出的SpePR方法与七种常用重采样方法进行了系统对比分析（详见表2）。实验以飞行高度为30m的高空间分辨率高光谱影像为基础，应用各方法进行空间尺度上推转换。转换结果通过多项定量指标从空间细节保持和光谱一致性两个维度进行评估，以验证各方法在保持原始影像信息方面的性能差异。
+
+(1)均值法 (Average)。该方法在重采样窗口内计算像元反射率的均值，并赋值给新像元。由于其能够有效平滑同质区域的光谱信息，因此在均匀地物区域具有较好的表现。然而，对于边界区域或异质区域，该方法可能会引入过度平滑效应，导致光谱细节损失。
+
+(2)双线性插值法 (Bilinear Interpolation)。该方法通过计算重采样窗口内四个邻近像元的加权平均值来确定新像元的光谱值。相比于均值法，双线性插值法在保持空间连续性方面表现更好，但由于权重计算采用线性关系，可能会造成高频信息损失，降低空间细节的保留能力\cite{grevera2002objective}。
+
+(3)最近邻插值法 (Nearest Neighbor Interpolation)。该方法直接将重采样窗口内最近的像元光谱值赋给新像元。计算简单且能较好地保持原始影像的细节，但容易在地物边界处产生明显的锯齿效应，影响光谱的一致性\cite{parker2007comparison,Hanssen1999Evaluation}。
+
+(4)三次插值法 (Cubic Interpolation)。该方法利用三次多项式函数对重采样窗口内的像元进行平滑处理，能够提供更高的空间平滑度和更好的边缘保持效果\cite{keys2003cubic}。然而，其计算复杂度较高，且在某些情况下可能导致光谱曲线的局部偏移。
+
+(5)拉普拉斯插值法 (Laplacian Interpolation)。该方法基于拉普拉斯算子对图像进行平滑处理，能够在保持空间细节的同时减少光谱失真。但其对噪声较为敏感，可能在低信噪比条件下影响修正效果\cite{turkowski1990filters}。
+
+(6)众数 (Mode)。该方法在降尺度窗口内计算像元反射率的众数（即出现频率最高的值）作为插值结果。由于高光谱数据具有连续光谱特性，众数法可能会导致局部像元信息丢失或离散化效应，使光谱曲线出现不连续性。
+
+(7)高斯滤波 (Gauss)。高斯滤波首先利用高斯卷积核（标准差σ）对影像进行低通滤波，以抑制高频噪声。随后，影像按照目标分辨率进行降采样。该方法在降尺度过程中能够减少随机噪声的影响，提升光谱平滑性，但可能导致局部空间细节过度平滑，从而影响高光谱数据的精细结构信息\cite{appledorn1996new}。
+{
+\zihao{5}                          % 表格内容五号字（按学位论文规范调整）
+\setlength{\tabcolsep}{4pt}       % 列间距（默认6pt，可按需调整）
+\renewcommand{\arraystretch}{1.2}  % 行高倍数
+
+\begin{longtable}{
+    >{\centering\arraybackslash}m{1.0cm}   % 第1列：居中，固定宽度
+    >{\centering\arraybackslash}m{4.0cm}     % 第2列：居中，固定宽度
+    m{10.0cm}                                  
+}
+%%% === 首页表头 === %%%
+\caption{重采样方法及描述}\label{tab:resample_methods} \\
+\toprule
+\textbf{序号} & \textbf{方法} & \multicolumn{1}{>{\centering\arraybackslash}m{10cm}}{\textbf{描述}} \\
+\midrule
+\endfirsthead
+%%% === 续页表头 === %%%
+\multicolumn{3}{l}{\zihao{5} 续表~\thetable\quad 重采样方法及描述} \\
+\toprule
+\textbf{序号} & \textbf{方法} & \multicolumn{1}{>{\centering\arraybackslash}m{10cm}}{\textbf{描述}} \\
+\midrule
+\endhead
+%%% === 每页表尾 === %%%
+\bottomrule
+\endfoot
+%%% === 表格内容 === %%%
+1 & Average & 在重采样窗口内计算像元反射率的均值，并赋值给新像元 \\
+2 & Bilinear Interpolation & 通过目标像元中心点周围4个最近邻原始像元的反射率值进行线性加权计算，权重由目标点与邻近像元的空间距离决定。 \\
+3 & Cubic Convolution & 采用分段三次多项式函数计算插值结果，基于目标像元周围16个邻近像素（4×4窗口）。 \\
+4 & Gauss & 先利用高斯卷积核（标准差$\sigma$）进行低通滤波以抑制高频噪声，然后按照目标分辨率采样。 \\
+5 & Lanczos & 一种改进的sinc插值方法，基于窗口化的sinc函数，对多个相邻像元施加加权平均，减少混叠效应。 \\
+6 & Mode & 在窗口内计算像元反射率的众数（出现频率最高的值）作为插值结果。 \\
+7 & Nearest Neighbor & 直接将目标像元的坐标进行舍入，选取最邻近的原始像元值作为插值结果。 \\
+\end{longtable}
+}
+\subsection{评估方法}
+\subsubsection{影像空间信息评估}
+为定量分析尺度转换对影像空间结构的影响，我们使用信息熵(Information Entropy)指标评估转换后影像的空间信息保持情况。信息熵是衡量影像复杂度和信息丰富程度的重要指标，其值越大表明影像包含的信息量越丰富，空间结构越复杂\cite{song2019class}。信息熵的计算公式如下：
+\begin{equation}
+H = -\sum_{i=0}^{L-1} p(i) \log_2 p(i)
+\label{eq:entropy}
+\end{equation}
+
+其中，$L$为影像的灰度级数，$p(i)$为灰度值为$i$的像素在整幅影像中出现的概率。对于高光谱影像，我们对每个波段分别计算信息熵，然后取平均值作为整个影像的信息熵指标。
+
+此外，我们还基于灰度共生矩阵的对比度（Contrast）指标，用以量化影像纹理复杂度及空间细节变化。灰度共生矩阵（GLCM）是一种通过计算特定距离下像素对之间灰度值关系的统计方法，它反映了图像中具有既定间隔的像素点灰度值的分布情况\cite{wan2022detection}。GLCM对比度能够敏感反映影像纹理的清晰度和空间梯度变化，是空间分辨率分析中常用的纹理评价指标。
+\subsubsection{光谱信息评估}
+为全面评价尺度转换方法对高光谱数据光谱特性的保持能力，我们使用SAM、光谱相关系数（Correlation）、SGA和SID四种评价指标，从不同角度评估尺度转换后的光谱保真度。
+
+SAM是将光谱曲线视为n维矢量（n表示两光谱曲线的波段数量），把目标像元光谱和参考光谱之间的广义夹角定义为光谱间的相似度量，其计算公式为：
+\begin{equation}
+\mathrm{SAM}(X,Y) = \cos^{-1}\left( \frac{\sum_{i=1}^{n} X_i Y_i}{\sqrt{\sum_{i=1}^{n} X_i^2} \cdot \sqrt{\sum_{i=1}^{n} Y_i^2}} \right)
+\label{eq:SAM}
+\end{equation}
+其中，$n$为波段数，$X_i$和$Y_i$分别表示目标像元光谱和参考光谱在第i个波段的反射率值。SAM值越小，表示两条光谱曲线的形状越相似，保持能力越好。
+
+在本论文中，SAM和Correlation主要用于评估尺度转换后影像光谱的整体特性保持能力，而SGA和SID则侧重于衡量样本光谱的局部光谱特征和统计分布的保持能力。SAM通过计算两光谱向量之间的夹角\cite{padma2014jeffries}来表示两光谱的相似程度\cite{chakravarty2021hyperspectral}。Correlation基于皮尔逊相关分析\cite{de2000spectral}，衡量光谱向量间的线性关系强度。SGA\cite{robila2005investigation}重点考察相邻波段间梯度变化的相似度，能够有效反映尺度转换方法对光谱局部细节特征。而SID\cite{chang1999spectral}用于衡量尺度转换光谱与实际观测光谱之间的信息损失或差异，它能够评估尺度转换后光谱分布的变化，有效捕捉到全局光谱特征的变化。
+\section{高光谱数据获取}
+\subsection{实验设计及无人机高光谱数据获取}
+使用Headwall公司生产的Headwall Co-Aligned HP高光谱成像系统，光谱范围为400-2500nm，获取不同空间尺度的高光谱影像。其中SWIR传感器的光谱范围为900-2500nm，光谱通道数为267，光谱分辨率为6nm，镜头焦距25mm。将16组伟晶岩样本均匀铺设于实验区域，地面平坦，以减少地表异质性、噪声及混合效应等外部干扰因素，从而能够更准确地评估方法\cite{morales2022laboratory,zheng2023hyperspectral}。样品放置间隔为1m，以避免空间混合效应（图\ref{实验区域}）。
+{
+\zihao{5}                          % 表格内容五号字（按学位论文规范调整）
+\setlength{\tabcolsep}{4pt}       % 列间距（默认6pt，可按需调整）
+\renewcommand{\arraystretch}{1.2}  % 行高倍数
+
+\begin{longtable}{
+    >{\centering\arraybackslash}m{2.5cm}   % 第1列：居中，固定宽度
+    >{\centering\arraybackslash}m{3cm}     % 第2列：居中，固定宽度
+    >{\centering\arraybackslash}m{3cm}     % 第3列：居中，固定宽度
+}
+
+%%% === 首页表头 === %%%
+\caption{无人机高光谱影像参数}\label{tab:flight_resolution} \\
+\toprule
+\textbf{飞行高度 (m)} & \textbf{空间分辨率 (cm)} & \textbf{影像数} \\
+\midrule
+\endfirsthead
+
+%%% === 续页表头 === %%%
+\multicolumn{3}{l}{\zihao{5} 续表~\thetable\quad 飞行高度与空间分辨率对应关系} \\
+\toprule
+\textbf{飞行高度 (m)} & \textbf{空间分辨率 (cm)} & \textbf{影像数} \\
+\midrule
+\endhead
+
+%%% === 每页表尾 === %%%
+\bottomrule
+\endfoot
+
+%%% === 表格内容 === %%%
+30 & 1.80 & 2 \\
+60 & 3.60 & 1 \\
+90 & 5.40 & 1 \\
+120 & 7.20 & 1 \\
+150 & 9.00 & 1 \\
+
+\end{longtable}
+}
+
+通过在每次飞行前关闭传感器快门记录暗场信号，在每次飞行之前进行暗电流采集，以有效去除传感器自身电子特性引起的信号偏差\cite{suomalainen2021direct}。使用Headwall公司提供的56\%反射率的标准反射布进行现场辐射亮度标定\cite{zhong2018mini}，反射布放置于飞行区域内。数据采集于2024年11月27日13：00-14：00之间完成，保证了最高的太阳高度角及无云层覆盖，以最小化光照变化对辐射一致性的影响。当天晴空无云、风速低于1m/s。为获取不同空间分辨率影像，无人机飞行高度分别设定为30m、60m、90m、120m、150m（表\ref{tab:flight_resolution}）。在飞行过程中将高光谱传感器悬挂于六旋翼无人机下方，相机采用推扫式成像模式。为保证成像质量，飞行速度设置为5m/s，航向重叠率为10\%，旁向重叠率为30\%，平行于飞行区域的最长边飞行。在数据采集的过程中，采用正射飞行模式并使用稳定云台对高光谱传感器进行固定，以保证稳定拍摄，提高成像质量。为确保数据可比性，各高度飞行采用相同的飞行区域、影像覆盖范围和航线规划，以控制外部因素对多尺度数据采集的影响。
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=1.0\textwidth]{figure/chapter04/研究区（中文）.png}
+	\caption{ 实验区域 (a)高光谱传感器；(b)标准反射参考布；(c)伟晶岩样本；(d)伟晶岩样本摆放位置示意} 
+	\label{实验区域}
+\end{figure}
+\subsection{实验室样本光谱获取}
+在实验室环境下利用PSR+3500便携式地物波谱仪对伟晶岩样本进行高精度光谱测量。PSR+3500地物波谱仪光谱分辨率为1nm，光谱范围为350-2500nm。所有样本光谱数据均在暗室中采集。针对每个样本，进行5次独立测量，并使用参考白板校准数据。每个样本的所有光谱计算其平均值作为最终光谱反射率，以降低测量误差并提高数据的稳定性。
+\subsection{数据预处理}
+\subsubsection{影像预处理}
+对无人机获取的原始高光谱影像进行预处理，以便于后续研究。首先，采集的高光谱影像使用Headwall SpectralView进行辐射校正，应用之前采集的暗电流来消除探测器暗电流偏移\cite{aasen2018quantitative,suomalainen2021direct}。然后利用56\%反射率的标准反射布得到的参考光谱数据，将高光谱影像每个像素的DN值转换为反射率。同时为减少环境噪声等的影响，使用Savitzky-Golay滤波器对高光谱数据进行平滑处理\ref{yu2021early}。为保证数据结果的可对比性，所有影像均采用统一的预处理流程。
+\subsubsection{光谱数据预处理}
+为确保实验分析的可靠性并减少噪声干扰，我们对不同飞行高度获取的高光谱影像进行了系统化的光谱提取与处理。首先，基于伟晶岩样本的精确地理位置，在各景影像中定位并提取对应像素点的光谱数据（图\ref{光谱拼接}(b)）。随后，对每个样本区域内的所有像素光谱进行均值计算，降低了单个像素可能受到的随机噪声影响，从而获得更为可靠的样本代表光谱。
+
+为增强光谱诊断特征并实现多尺度数据的有效对比，本研究对提取的样本光谱与实验室标准光谱均采用连续统去除\cite{clark1984reflectance}处理。该方法通过构建横跨整个光谱的凸包络线并进行归一化处理，能够有效消除基底反射率变化和大气散射等因素引起的背景光谱趋势，突出矿物的特征吸收特性，增强不同尺度光谱数据的可比性和一致性\cite{clark1984reflectance}。本研究重点分析了SWIR波长范围的影像和光谱特征，这是伟晶岩矿物最具诊断意义的波谱区间。
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.8\textwidth]{figure/chapter04/光谱拼接.png}
+	\caption{ 伟晶岩样本光谱 (a)实验室伟晶岩样本部分光谱;(c)实验室样本光谱连续统去除光谱；(b)影像中部分伟晶岩样本光谱(波段范围为900-2500nm);(d)影像中部分伟晶岩样本水汽吸收波段去除以及连续统去除光谱。} 
+	\label{光谱拼接}
+\end{figure}
+\section{实验结果与分析}
+\subsection{实验数据与特征描述}
+\subsubsection{伟晶岩样本光谱特征}
+实验室测得的伟晶岩光谱如图\ref{光谱拼接}(a)，光谱反射率在350~590nm波段内快速上升；在590~1300nm范围内反射率快速递增；在1350~1850nm波段内则保持在较高水平。从连续统去除光谱（图2c）计算吸收特征，伟晶岩样品在多个波长位置呈现明显的吸收特征，主要集中在~485nm、~960nm、~1410nm、~1910nm和~2200nm附近\cite{bai2023mapping}，其中960nm附近的吸收特征可能与样品中$Fe^{3+}$和$Fe{2+}$离子有关。在~1410nm和~1910nm处伟晶岩样本有明显的吸收特征，吸收深度达10-25\%（图\ref{吸收特征}），主要归因于矿物结构中羟基和水分子的振动吸收。为避免1400nm和1900nm附近由水分子和羟基吸收引起的弱吸收特征干扰\cite{bai2023mapping}，本研究重点关注2000–2400nm短波红外波段的光谱特征。该波段范围可以提供伟晶岩矿物主要的光谱吸收特征\cite{dalm2017discriminating,zhao2024shortwave}。该波段包含伟晶岩矿物组成的关键诊断信息，特别是~2200nm处的特征吸收，主要与铝硅酸盐矿物中Al–OH键的振动有关\cite{clark1990high}，其不对称吸收形态（图\ref{光谱拼接}(c)）为矿物识别和尺度转换方法评估提供了重要依据。
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.8\textwidth]{figure/chapter04/实测光谱吸收特征.png}
+	\caption{ 伟晶岩样本光谱 (a)实验室伟晶岩样本部分光谱;(c)实验室样本光谱连续统去除光谱；(b)影像中部分伟晶岩样本光谱(波段范围为900-2500nm);(d)影像中部分伟晶岩样本水汽吸收波段去除以及连续统去除光谱。} 
+	\label{吸收特征}
+\end{figure}
+\subsubsection{不同飞行高度影像样本特征}
+不同飞行高度获取的样本光谱经过连续统去除后，其归一化吸收特征如图4所示，所有样本在2200nm附近均表现出显著的吸收特征。我们提取了每个样本的中心吸收波长、吸收深度及吸收面积等关键光谱参数，并采用气泡图进行可视化分析。图中气泡颜色对应不同的飞行高度（30m、60m、90m、120m、150m），气泡大小表示吸收面积，横轴和纵轴分别对应吸收位置和吸收深度。图\ref{不同飞行高度特征}(a)–(f)分别表示30m、60m、90m、120m、150m各高度及其平均吸收特征。图\ref{不同飞行高度特征}(g)表示不同飞行高度下矿物的平均影像光谱。
+
+在30m飞行高度下（图\ref{不同飞行高度特征}(a)），样本的吸收波长主要分布于2190–2200nm区间，吸收深度达0.16-0.40，表明高空间分辨率条件下样本呈现更为显著的吸收特征。随着飞行高度增加至60m（图\ref{不同飞行高度特征}(b)），吸收深度减弱至0.10-0.28，吸收面积也相应减小。90m高度时（图\ref{不同飞行高度特征}(c)），吸收深度进一步降至0.09-0.20，且分布较60m更为集中。120m高度（图\ref{不同飞行高度特征}(d)）下，样本吸收深度为0.08-0.26，而150m高度（图\ref{不同飞行高度特征}(e)）时，在相似波长范围内吸收深度明显降低，可能受到更多环境或地形因素的影响。图\ref{不同飞行高度特征}(f)展示了各高度吸收特征的平均结果，显示吸收位置主要集中于约2195nm处，且随高度增加呈现短波偏移趋势；吸收深度范围为0.12-0.28，与吸收面积一样随飞行高度增加而降低。图\ref{不同飞行高度特征}(g)可以更直观的观察到这一现象，随着飞行高度的增加，光谱曲线整体逐渐趋于平滑，主要吸收谷的深度显著减小；同时，主吸收位置相较于30m飞信高度略向短波方向偏移，说明尺度变化对矿物诊断波段位置存在一定影响。。这一现象可归因于空间平均效应增强、局部光谱变化弱化以及混合像元效应增强\ref{zhang2025scale}。
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.9\textwidth]{figure/chapter04/不同飞行高度特征.png}
+	\caption{不同飞行高度样本光谱吸收特征} 
+	\label{不同飞行高度特征}
+\end{figure}
+
+因此，不同飞行高度采集的样本在光谱特征上表现出系统性差异，即随着空间分辨率的降低，吸收深度和吸收面积呈现递减趋势，反映出空间尺度变化对矿物光谱吸收特征的影响。
+\subsection{光谱特征保持分析}
+本研究对所提出的SpePR方法与七种常用重采样方法进行了系统对比分析。实验以飞行高度为30m的高空间分辨率高光谱影像为基础，应用各方法进行空间尺度上推转换。转换结果通过多项定量指标从空间细节保持和光谱一致性两个维度进行评估，以验证各方法在保持原始影像信息方面的性能差异。
+\subsubsection{波段相关矩阵稳定性分析}
+通过计算不同飞行高度伟晶岩样本高光谱数据的波段相关性矩阵，以评估其稳定性。采用余弦相似度和Frobenius范数差异两种指标量化矩阵间的相似程度。不同高度样本相对于30m参考高度样本的波段相关性矩阵稳定性指标如表\ref{tab:height_similarity}所示。
+{
+\zihao{5}                          % 表格内容五号字（按学位论文规范调整）
+\setlength{\tabcolsep}{4pt}       % 列间距（默认6pt，可按需调整）
+\renewcommand{\arraystretch}{1.2}  % 行高倍数
+
+\begin{longtable}{
+    >{\centering\arraybackslash}m{2.5cm}   % 第1列：居中，固定宽度
+    >{\centering\arraybackslash}m{3.5cm}     % 第2列：居中，固定宽度
+    >{\centering\arraybackslash}m{3.5cm}     % 第3列：居中，固定宽度
+}
+%%% === 首页表头 === %%%
+\caption{不同高度下波段相关性矩阵稳定性评估结果}\label{tab:height_similarity} \\
+\toprule
+\textbf{高度(m)} & \textbf{Frobenius范数差异} & \textbf{余弦相似度} \\
+\midrule
+\endfirsthead
+%%% === 续页表头 === %%%
+\multicolumn{3}{l}{\zihao{5} 续表~\thetable\quad 不同高度下波段相关性矩阵稳定性评估结果} \\
+\toprule
+\textbf{高度(m)} & \textbf{Frobenius范数差异} & \textbf{余弦相似度} \\
+\midrule
+\endhead
+%%% === 每页表尾 === %%%
+\bottomrule
+\endfoot
+%%% === 表格内容 === %%%
+60 & 3.334 & 0.931 \\
+90 & 3.280 & 0.933 \\
+120 & 3.326 & 0.931 \\
+150 & 3.336 & 0.931 \\
+\end{longtable}
+}
+结果表明，尽管飞行高度从30m变化至150m，波段相关性矩阵仍保持高度的相似性，所有测试高度的余弦相似度均超过0.93。Frobenius范数差异在不同高度下表现出极高的一致性，数值稳定在3.280-3.340之间，最大差异仅为0.056，进一步证明了波段相关性结构的稳定性。
+
+因此这种稳定性为SpePR方法提供了坚实的理论基础，表明利用波段相关性结构作为光谱特征的本质表征是合理且有效的。虽然空间分辨率变化会导致像素混合和光谱强度变化，但波段间的内在相关关系保持相对稳定，这一特性使得SpePR方法能够在空间重采样过程中有效保持光谱特征。
+\subsection{矿物关键吸收特征保持分析}
+本研究进一步针对影像中伟晶岩样本的像素光谱特征进行了定量分析，重点评估不同尺度转换模型对光谱吸收位置和吸收深度信息保持能力。
+\subsubsection{吸收位置}
+我们提取样本主要吸收位置，通过直方图（图\ref{吸收位置分布}）对比不同空间分辨率下各重采样方法对样本吸收位置保持的性能（图\ref{吸收位置分布}）。结果表明，在等效60m和90m较高空间分辨率下，除Mode方法出现明显位置偏移外，大多数方法对样本吸收位置的影响较小。然而，随着高度增至120m和150m时，所有方法的直方图均呈现峰值展宽、位置偏移甚至多峰分布现象，证实空间尺度上推对光谱吸收位置存在不可避免的影响。从方法对比来看，Nearest和Mode方法生成的样本吸收位置分布呈现更为平缓或明显的多峰形态，表明样本间吸收位置一致性显著降低，这可能导致后续矿物识别或分类任务中的精度下降或误判。相比之下，Average、Bilinear、Cubic和SpePR方法在各尺度下均保持了单一、窄峰的直方图分布，且峰值位置漂移极小，表明这四种方法能够更有效地保持关键光谱特征。
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.75\textwidth]{figure/chapter04/不同飞行高度样本吸收位置分布.png}
+	\caption{不同飞行高度样本吸收位置分布} 
+	\label{吸收位置分布}
+\end{figure}
+\subsubsection{吸收深度}
+接着，我们分析了各尺度下样本主要吸收位置的光谱吸收深度值（图7）。图中OBS（Observation）表示实际观测影像的吸收深度，作为评估尺度转换后光谱真实性的参考。结果表明，空间分辨率降低，各方法均呈现不同程度的吸收深度下降趋势。具体而言，最近邻插值和Mode方法表现出最大的深度降幅，约为7\%-12\%；Average与Bilinear方法虽然降幅较小，但分布较为分散且中位数明显偏离OBS参考值；Cubic与Gauss方法的降幅介于3\%-6\%之间，表现相对稳定。相比之下，SpePR方法的吸收深度分布与OBS最为接近，降幅仅为1.5\%-3\%，且异常值较少，分布更为均匀。从尺度变化趋势看，当空间尺度从60m升至90m时，大多数方法仍能较好地维持吸收深度分布，箱线图的中位数和四分位区间变化不大。然而，当等效120m和150m分辨率时，传统插值方法与Obs之间的差距显著增大，表明在较粗空间分辨率下，常规方法的光谱特征保持能力明显下降。总体来看，SpePR方法在各空间尺度下均展现出较高的稳定性和保真度，其转换结果更接近同尺度实际观测影像。
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.9\textwidth]{figure/chapter04/吸收深度2.png}
+	\caption{不同飞行高度样本光谱吸收深度} 
+	\label{吸收深度}
+\end{figure}
+\subsection{空间-光谱评估}
+\subsubsection{空间信息保持评估}
+本研究从整体和局部两个维度评估不同尺度转换方法的光谱保持性能（图\ref{信息量损失}）。其中，SAM和Correlation比较转换后影像与实际观测影像的整体光谱一致性，SGA和SID则评估伟晶岩样本光谱的局部特征保持情况。结果表明，随着高度从60m升至150m，各指标误差均呈递增趋势。SpePR方法在所有评价维度上的误差低于传统方法，表明其可以效保留影像整体光谱信息，同时精确保持矿物样本的关键特征，为矿物识别提供更可靠的光谱基础。
+
+(1)样本光谱
+
+1）局部光谱特征保持。使用SGA定量评估尺度转换结果与实际观测样本在光谱梯度上的差异，值越小表明两者梯度越接近，误差越小。图\ref{信息量损失}(a)显示，在模拟60m飞行高度分辨率影像时，SpePR的SGA误差值最低(0.029)，且随分辨率降低误差增幅最小（150m时为0.037），可以更好地保留局部光谱信息。相比之下，传统方法在150m时的SGA误差值为0.041-0.100，高出SpePR方法10.8\%–170.3\%，局部光谱信息保持能力较差。
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.95\textwidth]{figure/chapter04/信息量损失.png}
+	\caption{不同飞行高度光谱评价} 
+	\label{信息量损失}
+\end{figure}
+
+2）全局光谱分布一致性。通过SID定量衡量尺度转换结果与实际观测样本在光谱向量分布上的差异，数值越低表明分布越接近。在等效150m分辨率条件下（图\ref{信息量损失}(b)），SpePR方法的SID误差为1.079，低于传统方法（Nearest为2.003，Cubic为1.386）。这表明随着空间分辨率降低，传统方法的光谱分布与实际观测数据差异逐渐扩大，而SpePR方法通过构建光谱相关性约束矩阵，能有效保持全局光谱分布特性，抑制尺度转换过程中的光谱畸变。
+
+(2)影像光谱
+
+1）光谱形状保持。SAM指标量化尺度转换后影像与实际观测影像的光谱相似性，值越小表示光谱形态越一致。在等效150m分辨率条件下，SpePR方法的SAM均值误差为0.089（图\ref{信息量损失}(c)），低于其他方法。各尺度测试中，SpePR方法始终保持较低的光谱误差，而Mode和Nearest方法随分辨率降低误差显著上升，表明这两种方法难以有效保留原始影像的光谱特征。
+
+2）相关性分析。Correlation衡量转换后影像与实际观测影像光谱的线性相关程度，值越接近1表明光谱结构越完整。图\ref{信息量损失}(d)通过热力图直观展示相关系数空间分布，红色区域表示相关性高，光谱形态吻合度佳。结果显示，SpePR方法在各分辨率下相关系数均处于0.840至0.850的高值区间，误差热力图呈现红色或偏红区域。相比之下，Nearest和Mode方法在等效120m和150m分辨率下，误差扩大至0.289~0.328，误差热力图呈现明显蓝色或浅色区域，表明这些方法在低分辨率下光谱线性关系显著削弱。
+
+综合各评价指标，不同尺度转换方法的光谱信息保持能力依次为：$SpePR>Bilinear>Cubic>Average>Lanczos>Gauss>Nearest>Mode$。SpePR方法在保持原始光谱特征方面表现最优，双线性和三次插值方法次之，而最近邻和众数方法引入较大误差，光谱畸变最为严重。
+\subsection{空间结构保持评估}
+为全面评估各重采样方法在高光谱影像空间信息保持方面的性能，本研究采用ENT与GLCM对比度作为主要空间评价指标。ENT用于衡量影像的整体信息量与纹理复杂度，数值越高表示影像细节与空间变化保留越充分。而GLCM对比度用于量化影像的局部纹理差异，可反映空间结构的清晰度与对比特征。实验过程中，我们对各方法模拟不同飞行高度的影像（60m、90m、120m、150m）进行了空间特征分析，并与相应尺度的实际观测影像进行对比。通过误差棒图展示各方法在不同高度下的ENT值与参考影像的偏差，直观反映了尺度转换过程中空间信息复杂性的保持情况。同时结合GLCM对比度结果，从纹理层面进一步验证了各方法在空间结构保真性方面的差异。
+
+结果显示，随着空间分辨率的降低，所有方法的ENT值均呈下降趋势，表明尺度转换过程中不可避免地发生了空间信息损失（图\ref{ENT}）。不同方法间的下降幅度存在显著差异，反映出各方法在保持空间信息方面的能力差异。实际观测影像在空间分辨率降低过程中的信息损失为-7.17\%，而各尺度转换方法的ENT值下降幅度从小到大依次为：Nearest(-0.14\%)、Gauss(-3.34\%)、SpePR(-4.82\%)、Bilinear(-5.31\%)、Average(-5.60\%)、Cubic、Lanczos(-5.85\%)和Mode(-10.25\%)。Mode方法导致的空间信息损失最为严重，表明其在空间信息保持方面表现较差。值得注意的是，实际观测影像随分辨率下降的信息损失明显高于大多数尺度转换方法，这是因为尺度转换过程高度依赖原始影像信息，导致转换后影像的纹理变化特征相对较弱\cite{roy1994investigation}。Nearest方法虽然ENT变化最小(-0.14\%)，空间信息保持能力看似最强，但其往往在转换过程中引入明显的块状效应\cite{feng2012normalized}，影响视觉质量。在各尺度条件下，SpePR方法始终表现出良好的稳定性和较小的误差。从空间信息保持程度和变化幅度来看，SpePR方法生成的影像最接近同尺度实际观测影像，显示出较优的综合性能。
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.6\textwidth]{figure/chapter04/ENT.png}
+	\caption{不同空间尺度影像的信息熵} 
+	\label{ENT}
+\end{figure}
+将同尺度下的真实影像作为参考标准，评价各重采样方法所得影像的对比度偏差。表4展示了在不同重采样尺度下各方法的GLCM对比度结果。结果显示，SpePR方法在各分辨率下的对比度值(26.089-27.248)与原始影像最为接近，说明其在重采样过程中有效抑制了空间模糊与细节丢失。同时在不同尺度间的波动幅度仅为±2.17\%，表现出较高的稳定性。Mode和Nearest等方法的对比度显著高于真实影像，说明其在重采样过程中引入了较强的局部梯度变化，导致影像纹理过于锐化。因此，SpePR方法在实现光谱保真性的同时，也在空间维度上保持了较高的结构一致性。
+{
+\zihao{5}                          % 表格内容五号字（按学位论文规范调整）
+\setlength{\tabcolsep}{2pt}        % 列间距微调（因列数多，从4pt减至2pt避免溢出）
+\renewcommand{\arraystretch}{1.2}  % 行高倍数
+
+\begin{longtable}{
+    >{\centering\arraybackslash}m{1.2cm}   % 第1列：飞行高度（缩窄列宽适配多列）
+    >{\centering\arraybackslash}m{1.5cm}   % 第2列：really
+    >{\centering\arraybackslash}m{1.5cm}   % 第3列：Average
+    >{\centering\arraybackslash}m{1.5cm}   % 第4列：Bilinear
+    >{\centering\arraybackslash}m{1.5cm}   % 第5列：Cubic
+    >{\centering\arraybackslash}m{1.5cm}   % 第6列：Gauss
+    >{\centering\arraybackslash}m{1.5cm}   % 第7列：Lanczos
+    >{\centering\arraybackslash}m{1.5cm}   % 第8列：Mode
+    >{\centering\arraybackslash}m{1.5cm}   % 第9列：Nearest
+    >{\centering\arraybackslash}m{1.5cm}   % 第10列：SpePR（最后一列）
+}
+%%% === 首页表头 === %%%
+\caption{各飞行高度下GLCM对比度}\label{tab:resample_index} \\
+\toprule
+\textbf{飞行高度(m)} & \textbf{Obs} & \textbf{Average} & \textbf{Bilinear} & \textbf{Cubic} & \textbf{Gauss} & \textbf{Lanczos} & \textbf{Mode} & \textbf{Nearest} & \textbf{SpePR} \\
+\midrule
+\endfirsthead
+%%% === 续页表头 === %%%
+\multicolumn{10}{l}{\zihao{5} 续表~\thetable\quad 各飞行高度下GLCM对比度} \\
+\toprule
+\textbf{飞行高度(m)} & \textbf{Obs} & \textbf{Average} & \textbf{Bilinear} & \textbf{Cubic} & \textbf{Gauss} & \textbf{Lanczos} & \textbf{Mode} & \textbf{Nearest} & \textbf{SpePR} \\
+\midrule
+\endhead
+%%% === 每页表尾 === %%%
+\bottomrule
+\endfoot
+%%% === 表格内容（最后一列数值加粗） === %%%
+60 & 25.546 & 30.683 & 18.097 & 28.029 & 23.223 & 34.515 & 71.311 & 69.504 & \textbf{27.248} \\
+90 & 27.148 & 30.702 & 20.111 & 28.227 & 26.332 & 34.563 & 90.165 & 89.089 & \textbf{26.897} \\
+120 & 22.827 & 29.175 & 18.117 & 27.188 & 35.994 & 33.468 & 105.033 & 101.480 & \textbf{26.428} \\
+150 & 24.091 & 30.144 & 18.615 & 27.034 & 37.101 & 32.998 & 109.993 & 116.154 & \textbf{26.089} \\
+\end{longtable}
+}
+\section{实验验证}
+为验证所提出方法在不同矿物类型中的适用性，本研究选取了白云岩、泥岩和绢云母石英片岩三种典型矿物进行补充实验。这些矿物具有不同的光谱特征和诊断性吸收特征，能够全面评估方法的泛化能力。验证实验采用与前文伟晶岩实验相同的数据获取与处理流程。样本同样放置于均一草地背景上，使用同一无人机高光谱成像系统分别获取高、低空间分辨率影像数据。使用PSR+3500便携式地物波谱仪采集各矿物样本的实验室光谱数据作为参考光谱。
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.8\textwidth]{figure/chapter04/样本光谱.png}
+	\caption{不同矿物样本的影像提取光谱与实验室标准光谱对比。黑色曲线为实验室标准光谱，红色曲线表示高光谱影像中提取的对应样本光谱。左列(a)、(c)、(e)为原始反射率曲线，右列(b)、(d)、(f)为对应的连续统去除光谱。} 
+	\label{标准光谱对比}
+\end{figure}
+三种矿物的影像光谱曲线及其与实验室标准光谱的对比结果表明，影像光谱在主要吸收特征的位置和形态上与实验室光谱保持较高一致性（图\ref{标准光谱对比}）。进一步对尺度转换后的影像样本光谱与同尺度真实影像样本的吸收位置进行定量比较（表\ref{tab:mineral_spectrum}），结果显示，SpePR方法在不同矿物的关键吸收位置均能实现较高的保持精度：白云岩在约2323nm处的吸收特征、灰岩在约2334nm处的吸收特征以及绢云母石英片岩在约2200nm处的诊断性Al-OH吸收特征均得到良好保持。这表明该方法在多类型矿物光谱的尺度转换过程中具有较强的光谱特征保持能力与结构一致性。
+{
+\zihao{5}                          % 表格内容五号字（按学位论文规范调整）
+\setlength{\tabcolsep}{1pt}        % 列间距微调（多列场景缩窄至2pt避免溢出）
+\renewcommand{\arraystretch}{1.2}  % 行高倍数
+\begin{longtable}{
+    >{\centering\arraybackslash}m{1.5cm}    % 第1列：样本（加宽适配中文名称）
+    >{\centering\arraybackslash}m{1.2cm}  % 第2列：实验室光谱
+    >{\centering\arraybackslash}m{1.2cm}  % 第3列：30m
+    >{\centering\arraybackslash}m{1.3cm}  % 第4列：60m (Obs)
+    >{\centering\arraybackslash}m{1.5cm}  % 第5列：60m (SpePR)
+    >{\centering\arraybackslash}m{1.3cm}  % 第6列：90m (Obs)
+    >{\centering\arraybackslash}m{1.5cm}  % 第7列：90m (SpePR)
+    >{\centering\arraybackslash}m{1.3cm}  % 第8列：120m (Obs)
+    >{\centering\arraybackslash}m{1.5cm}  % 第9列：120m (SpePR)
+    >{\centering\arraybackslash}m{1.3cm}  % 第10列：150m (Obs)
+    >{\centering\arraybackslash}m{1.5cm}  % 第11列：150m (SpePR)
+}
+%%% === 首页表头 === %%%
+\caption{不同飞行高度样本光谱吸收位置对比}\label{tab:mineral_spectrum} \\
+\toprule
+\textbf{样本} & \textbf{实验室光谱} & \textbf{30m} & \textbf{60m (Obs)} & \textbf{60m (SpePR)} & \textbf{90m (Obs)} & \textbf{90m (SpePR)} & \textbf{120m (Obs)} & \textbf{120m (SpePR)} & \textbf{150m (Obs)} & \textbf{150m (SpePR)} \\
+\midrule
+\endfirsthead
+%%% === 续页表头 === %%%
+\multicolumn{11}{l}{\zihao{5} 续表~\thetable\quad 不同飞行高度样本光谱吸收位置对比} \\
+\toprule
+\textbf{样本} & \textbf{实验室光谱} & \textbf{30m} & \textbf{60m (Obs)} & \textbf{60m (SpePR)} & \textbf{90m (Obs)} & \textbf{90m (SpePR)} & \textbf{120m (Obs)} & \textbf{120m (SpePR)} & \textbf{150m (Obs)} & \textbf{150m (SpePR)} \\
+\midrule
+\endhead
+%%% === 每页表尾 === %%%
+\bottomrule
+\endfoot
+%%% === 表格内容（含合并行处理） === %%%
+灰岩 & 2334 & 2329.63 & 2329.63 & 2329.63 & 2329.63 & 2329.63 & 2329.63 & 2329.63 & 2329.63 & 2329.63 \\
+砾屑白云岩 & 2323 & 2323.64 & 2323.64 & 2323.64 & 2323.64 & 2323.64 & 2323.64 & 2323.64 & 2323.64 & 2323.64 \\
+\multirow{2}{=}{\centering 绢云母石英片岩}  % 合并2行，居中显示
+& 2198 & 2197.54 & 2197.54 & 2197.54 & 2197.54 & 2197.54 & 2197.54 & 2197.54 & 2197.54 & 2197.54 \\
+% \cmidrule(l){2-11}  % 组内细线，仅覆盖第2-11列
+& 2333 & 2329.64 & 2329.64 & 2329.64 & 2329.64 & 2329.64 & 2329.64 & 2329.64 & 2329.64 & 2329.64 \\
+\midrule
+\multicolumn{11}{p{0.95\textwidth}}{\zihao{6}\textit{注：}表中数值表示各样本在不同飞行高度下的样本的主要诊断吸收特征波长(nm)。Obs表示直接获取的对应分辨率影像光谱，SpePR表示使用本文提出的SpePR方法从30m分辨率上采样获得的光谱} \\
+\end{longtable}
+}
+
+表\ref{tab:spepr_SAM}和表\ref{tab:spepr_Correlation}分别展示不同重采样方法在影像整体光谱的SAM和Correlation评价结果。结果显示，在各飞行高度下，SpePR方法的SAM值显著低于其他方法，而Correlation值高于其他方法。进一步比较不同矿物类型的实验结果可知，SpePR方法在白云岩、灰岩和绢云母石英片岩三种典型矿物的重采样处理中，均能有效保持关键诊断吸收特征的位置与形态，显著优于传统插值方法。实验验证了该方法具有较好的泛化能力和实用价值，适用于多种矿物类型的高光谱影像上采样处理。
+{
+\zihao{5}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{
+>{\centering\arraybackslash}m{1.2cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+}
+%%% === 首页表头 === %%%
+\caption{不同飞行高度下各重采样方法的SAM值对比}\label{tab:spepr_SAM} \\
+\toprule
+\textbf{飞行高度(m)} & \textbf{SpePR} & \textbf{Nearest} & \textbf{Cubic} & \textbf{Bilinear} & \textbf{Average} & \textbf{Mode} & \textbf{Gauss} & \textbf{Lanczos} \\
+\midrule
+\endfirsthead
+%%% === 续页表头 === %%%
+\multicolumn{9}{l}{\zihao{5} 续表~\thetable} \\
+\toprule
+\textbf{飞行高度(m)} & \textbf{SpePR} & \textbf{Nearest} & \textbf{Cubic} & \textbf{Bilinear} & \textbf{Average} & \textbf{Mode} & \textbf{Gauss} & \textbf{Lanczos} \\
+\midrule
+\endhead
+%%% === 每页表尾 === %%%
+\bottomrule
+\endfoot
+%%% === 表格内容 === %%%
+60  & \textbf{0.051} & 0.060 & 0.082 & 0.059 & 0.059 & 0.060 & 0.059 & 0.088 \\
+90  & \textbf{0.059} & 0.061 & 0.102 & 0.060 & 0.061 & 0.062 & 0.059 & 0.109 \\
+120 & \textbf{0.068} & 0.071 & 0.124 & 0.070 & 0.071 & 0.073 & 0.070 & 0.124 \\
+150 & \textbf{0.084} & 0.090 & 0.164 & 0.086 & 0.087 & 0.091 & 0.087 & 0.143 \\
+\end{longtable}
+}
+
+{
+\zihao{5}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{
+>{\centering\arraybackslash}m{1.2cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+>{\centering\arraybackslash}m{1.4cm}
+}
+%%% === 首页表头 === %%%
+\caption{不同飞行高度下各重采样方法的Correlation值对比}\label{tab:spepr_Correlation} \\
+\toprule
+\textbf{飞行高度(m)} & \textbf{SpePR} & \textbf{Nearest} & \textbf{Cubic} & \textbf{Bilinear} & \textbf{Average} & \textbf{Mode} & \textbf{Gauss} & \textbf{Lanczos} \\
+\midrule
+\endfirsthead
+%%% === 续页表头 === %%%
+\multicolumn{9}{l}{\zihao{5} 续表~\thetable} \\
+\toprule
+\textbf{飞行高度(m)} & \textbf{SpePR} & \textbf{Nearest} & \textbf{Cubic} & \textbf{Bilinear} & \textbf{Average} & \textbf{Mode} & \textbf{Gauss} & \textbf{Lanczos} \\
+\midrule
+\endhead
+%%% === 每页表尾 === %%%
+\bottomrule
+\endfoot
+%%% === 表格内容 === %%%
+ 60  & \textbf{0.878} & 0.836 & 0.835 & 0.851 & 0.849 & 0.832 & 0.850 & 0.679 \\
+ 90  & \textbf{0.864} & 0.818 & 0.812 & 0.840 & 0.836 & 0.811 & 0.837 & 0.804 \\
+ 120 & \textbf{0.829} & 0.792 & 0.784 & 0.820 & 0.815 & 0.785 & 0.812 & 0.780 \\
+ 150 & \textbf{0.783} & 0.743 & 0.728 & 0.773 & 0.768 & 0.736 & 0.766 & 0.722 \\
+\midrule
+\multicolumn{9}{p{0.85\textwidth}}{\zihao{6}\textit{注：}表中SAM值与Correlation通过比较重采样结果与相应分辨率下直接获取的高光谱影像计算得出。其中SAM数值越小表示光谱相似度越高，Correlation数值越接近1表示光谱相似度越高。} \\
+\end{longtable}
+}
+\section{矿物光谱特征的空间尺度效应}
+% 需要前面的章节进行衔接和过度，说明尺度效应问题。针对尺度变化导致的光谱诊断特征弱化的问题，提出光谱特征保持的空间升尺度重采样方法（SpePR），在降低空间分辨率的同时尽可能保持矿物关键吸收特征，为多尺度建模与迁移学习提供数据基础。
+实验结果表明，随着飞行高度从30m增至150m，矿物光谱吸收特征呈现明显的空间尺度依赖性。随着空间分辨率降低，伟晶岩样本的光谱特征表现出尺度依赖性，主要体现为吸收深度减弱和吸收面积缩小。这是由于空间平均效应随分辨率降低而增强，小尺度下可分辨的局部光谱变化被弱化\cite{clark2005hyperspectral,ghosh2014framework}，同时其他环境因素对光谱响应的影响增大，导致面积与吸收深度间的直接关联发生变化。
+
+尺度效应对光谱特征的影响呈现非线性特征。在30-90m分辨率范围内，光谱变化较为剧烈；而在120-150m范围内，变化趋于平缓。可能存在临界尺度，超过该尺度后，矿物光谱特征的变化率显著降低。因此，针对特定矿物类型，可能存在最优观测尺度区间，在该区间内光谱特征保持相对稳定。
+
+另外，尽管光谱深度和面积随尺度变化明显，伟晶岩吸收中心位置在各观测高度下均稳定集中在2190-2205nm范围内。这表明该波段对目标矿物具有可靠的指示性，不受尺度变化的显著影响，与前人研究结果一致\cite{bai2023mapping,booysen2022accurate}。因此，在跨尺度高光谱数据应用于伟晶岩矿物识别时，该波段的光谱稳定性可作为关键特征，有助于提高不同空间尺度下伟晶岩区域的识别精度。
+
+\section{本章小结}
+本章内容针对高光谱影像空间上尺度转换过程中光谱特征保持的问题，提出了一种基于光谱特征保持的高光谱影像空间上尺度转换方法（SpePR），并利用多尺度无人机高光谱数据对方法的有效性进行了系统验证。实验结果表明，矿物光谱特征具有明显的尺度依赖性。随着空间分辨率的降低，伟晶岩样本的吸收深度和吸收面积呈递减趋势，而吸收位置保持相对稳定。飞行高度从30–150m，吸收深度下降约22.5\%，但吸收位置变化不超过5nm，表明吸收位置是多尺度矿物识别中稳定的光谱特征参数。传统尺度转换方法在光谱特征保持方面存在明显不足，常用重采样算法（如最近邻法、众数法等）虽能在一定程度上维持空间信息，但对关键矿物吸收特征的保持能力有限，尤其在空间分辨率降低时表现不佳。与此相比，SpePR方法通过引入光谱结构约束并结合空间平滑优化，有效地保留了矿物的光谱特征信息。在SAM和光谱相关性指标下，SpePR方法的误差比最佳传统方法低8.2\%-15.7\%；在SGA和SID方面，其平均优势分别达到23.6\%和27.9\%。此外，在空间信息和纹理特征保持方面，SpePR实现了空间结构与光谱特征的协同优化，在空间连续性上更接近实际观测影像，表现出较高的稳定性，表明SpePR方法在空间与光谱一致性之间取得了更优的平衡。
